@@ -47,10 +47,10 @@ TOKEN_ARG=""
 ### 명령행 옵션 파싱 ###
 for arg in "$@"; do
   case "$arg" in
-    --zone=*)
+    --zone-id=*)
       ZONE_ID="${arg#*=}"
       ;;
-    --record=*)
+    --record-name=*)
       RECORD_NAME="${arg#*=}"
       ;;
     --api-token=*)
