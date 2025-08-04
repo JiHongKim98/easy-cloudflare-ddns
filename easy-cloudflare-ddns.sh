@@ -9,12 +9,13 @@ exec >>"$LOG_FILE" 2>&1
 TRACE_ID=$(cat /proc/sys/kernel/random/uuid | cut -c1-8)
 
 ### 로그 레벨 설정 ###
-LOG_LEVEL="INFO"   # info, warn, error 중 하나 선택 (기본값: info)
+LOG_LEVEL="INFO"   # debug, info, warn, error 중 하나 선택 (기본값: debug)
 log_level_to_number() {
   case "$1" in
-    INFO) echo 0 ;;
-    WARN) echo 1 ;;
-    ERROR) echo 2 ;;
+    DEBUG) echo 0 ;;
+    INFO) echo 1 ;;
+    WARN) echo 2 ;;
+    ERROR) echo 3 ;;
     *) echo 0 ;;  # 알 수 없는 레벨은 일단은 기본값이랑 똑같이 설정
   esac
 }
@@ -63,19 +64,20 @@ for arg in "$@"; do
       LOG_LEVEL=$(echo "${arg#*=}" | tr '[:lower:]' '[:upper:]')
       ;;
     *)
-      ;;    # 다른 인자값은 무시
+      log_format WARN "알 수 없는 인자: $arg"
+      ;;
   esac
 done
 
 ### 필수 인자 유효성 검사 ###
 if [ -z "$ZONE_ID" ] || [ -z "$RECORD_NAME" ]; then
-  log_format ERROR "--zone, --record 인자는 필수입니다."
-  echo "Usage: $0 --zone=<ZONE_ID> --record=<RECORD_NAME> (--api-token=TOKEN | --api-token-file=FILE)"
+  log_format ERROR "--zone-id, --record-name 인자는 필수입니다."
+  echo "Usage: $0 --zone-id=<ZONE_ID> --record-name=<RECORD_NAME> (--api-token=TOKEN | --api-token-file=FILE)"
   exit 1
 fi
 
 if [ -n "$API_TOKEN" ] && [ -n "$API_TOKEN_FILE" ]; then
-  log_format WARN "--api-token과 --api-token-file이 모두 제공되었습니다. --api-token을 우선 사용합니다."
+  log_format WARN "--api-token 과 --api-token-file 이 모두 제공되었습니다. 실제로 적용되는 값은 --api-token 입니다."
   TOKEN_ARG=$(echo "$API_TOKEN" | tr -d '\r\n[:space:]')
 elif [ -n "$API_TOKEN_FILE" ]; then
   if [ ! -f "$API_TOKEN_FILE" ] || [ ! -r "$API_TOKEN_FILE" ]; then
@@ -104,7 +106,7 @@ get_external_ip() {
   ip=$(curl -fsS https://ifconfig.me/ip) || \
   ip=$(curl -fsS https://ifconfig.co/ip) || \
   ip=$(curl -fsS https://api.ipify.org) || \
-  { log_format ERROR "외부 IP 조회 실패"; exit 1; }
+  { log_format ERROR "외부 IP 조회에 실패했습니다."; exit 1; }
   echo "$ip"
 }
 
@@ -125,10 +127,10 @@ update_record() {
 }
 
 ### 실행 시작 ###
-log_format INFO "스크립트 시작: ZONE=${ZONE_ID}, RECORD=${RECORD_NAME}"
+log_format DEBUG "스크립트 시작: ZONE=${ZONE_ID}, RECORD=${RECORD_NAME}"
 
 EXT_IP=$(get_external_ip)
-log_format INFO "외부 IP: ${EXT_IP}"
+log_format DEBUG "외부 IP: ${EXT_IP}"
 
 RAW_JSON=$(fetch_record)
 
@@ -136,20 +138,20 @@ RECORD_ID=$(echo "$RAW_JSON" | jq -r '.result[0].id')
 CURRENT_IP=$(echo "$RAW_JSON" | jq -r '.result[0].content')
 CURRENT_TTL=$(echo "$RAW_JSON" | jq -r '.result[0].ttl')
 CURRENT_PROXIED=$(echo "$RAW_JSON" | jq -r '.result[0].proxied')
-log_format INFO "현재 DNS IP: ${CURRENT_IP} | 현재 TTL: ${CURRENT_TTL} | 현재 PROXIED: ${CURRENT_PROXIED}"
+log_format DEBUG "현재 DNS IP: ${CURRENT_IP} | 현재 TTL: ${CURRENT_TTL} | 현재 PROXIED: ${CURRENT_PROXIED}"
 
 if [ "$EXT_IP" != "$CURRENT_IP" ]; then
   log_format INFO "IP 변경 감지: ${CURRENT_IP} → ${EXT_IP}"
   RESULT_JSON=$(update_record "$RECORD_ID" "$EXT_IP" "$CURRENT_TTL" "$CURRENT_PROXIED")
   SUCCESS=$(echo "$RESULT_JSON" | jq -r '.success')
   if [ "$SUCCESS" = "true" ]; then
-    log_format INFO "DNS 레코드 업데이트 성공: ${EXT_IP}"
+    log_format INFO "DNS 레코드 업데이트 완료: ${EXT_IP}"
   else
-    log_format ERROR "업데이트 실패: $RESULT_JSON"
+    log_format ERROR "DNS 레코드 업데이트 실패: $RESULT_JSON"
     exit 1
   fi
 else
-  log_format INFO "IP 동일: 업데이트 불필요"
+  log_format DEBUG "IP가 변경되지 않았습니다: ${EXT_IP}"
 fi
 
-log_format INFO "스크립트 종료"
+log_format DEBUG "스크립트 종료"
