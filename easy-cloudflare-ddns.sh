@@ -117,11 +117,11 @@ fetch_record() {
 
 ### 레코드 업데이트 ###
 update_record() {
-  local record_id="$1" new_ip="$2"
+  local record_id="$1" new_ip="$2" ttl="$3" proxied="$4"
   curl -fsS -X PUT "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records/${record_id}" \
     -H "Authorization: Bearer ${API_TOKEN}" \
     -H "Content-Type: application/json" \
-    --data "{\"type\":\"A\",\"name\":\"${RECORD_NAME}\",\"content\":\"${new_ip}\",\"ttl\":120,\"proxied\":false}"
+    --data "{\"type\":\"A\",\"name\":\"${RECORD_NAME}\",\"content\":\"${new_ip}\",\"ttl\":${ttl},\"proxied\":${proxied}}"
 }
 
 ### 실행 시작 ###
@@ -134,11 +134,13 @@ RAW_JSON=$(fetch_record)
 
 RECORD_ID=$(echo "$RAW_JSON" | jq -r '.result[0].id')
 CURRENT_IP=$(echo "$RAW_JSON" | jq -r '.result[0].content')
-log_format INFO "현재 DNS IP: ${CURRENT_IP}"
+CURRENT_TTL=$(echo "$RAW_JSON" | jq -r '.result[0].ttl')
+CURRENT_PROXIED=$(echo "$RAW_JSON" | jq -r '.result[0].proxied')
+log_format INFO "현재 DNS IP: ${CURRENT_IP} | 현재 TTL: ${CURRENT_TTL} | 현재 PROXIED: ${CURRENT_PROXIED}"
 
 if [ "$EXT_IP" != "$CURRENT_IP" ]; then
   log_format INFO "IP 변경 감지: ${CURRENT_IP} → ${EXT_IP}"
-  RESULT_JSON=$(update_record "$RECORD_ID" "$EXT_IP")
+  RESULT_JSON=$(update_record "$RECORD_ID" "$EXT_IP" "$CURRENT_TTL" "$CURRENT_PROXIED")
   SUCCESS=$(echo "$RESULT_JSON" | jq -r '.success')
   if [ "$SUCCESS" = "true" ]; then
     log_format INFO "DNS 레코드 업데이트 성공: ${EXT_IP}"
