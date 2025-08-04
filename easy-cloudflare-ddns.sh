@@ -9,11 +9,12 @@ exec >>"$LOG_FILE" 2>&1
 TRACE_ID=$(cat /proc/sys/kernel/random/uuid | cut -c1-8)
 
 ### 로그 레벨 설정 ###
-LOG_LEVEL="INFO"   # info, error 중 하나 선택 (기본값: info)
+LOG_LEVEL="INFO"   # info, warn, error 중 하나 선택 (기본값: info)
 log_level_to_number() {
   case "$1" in
     INFO) echo 0 ;;
-    ERROR) echo 1 ;;
+    WARN) echo 1 ;;
+    ERROR) echo 2 ;;
     *) echo 0 ;;  # 알 수 없는 레벨은 일단은 기본값이랑 똑같이 설정
   esac
 }
@@ -33,7 +34,7 @@ log_format() {
 
   local timestamp
   timestamp=$(date '+%m/%d/%Y-%H:%M:%S')
-  echo "[$level] [($TRACE_ID) $timestamp] $*"
+  echo "($TRACE_ID) [$level] [$timestamp] $*"
 }
 
 ### 기본 변수 초기화 ###
@@ -74,8 +75,8 @@ if [ -z "$ZONE_ID" ] || [ -z "$RECORD_NAME" ]; then
 fi
 
 if [ -n "$API_TOKEN" ] && [ -n "$API_TOKEN_FILE" ]; then
-  log_format ERROR "--api-token과 --api-token-file은 동시에 사용할 수 없습니다."
-  exit 1
+  log_format WARN "--api-token과 --api-token-file이 모두 제공되었습니다. --api-token을 우선 사용합니다."
+  TOKEN_ARG=$(echo "$API_TOKEN" | tr -d '\r\n[:space:]')
 elif [ -n "$API_TOKEN_FILE" ]; then
   if [ ! -f "$API_TOKEN_FILE" ] || [ ! -r "$API_TOKEN_FILE" ]; then
     log_format ERROR "API 토큰 파일이 존재하지 않거나 읽을 수 없습니다: $API_TOKEN_FILE"
